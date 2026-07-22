@@ -1,0 +1,52 @@
+# ROS 2 generated directories
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# C and C++
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+
+# Logs and datasets
+logs/*
+!logs/.gitkeep
+
+datasets/*
+!datasets/.gitkeep
+
+# Credentials and secrets
+*.key
+*.pem
+*.env
+.env
+secrets/
