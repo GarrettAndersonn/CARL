@@ -226,7 +226,7 @@ void setup() {
   can1.setMaxMB(16);
   can1.enableFIFO();
 
-  Serial.println(F("AVL_CARL throttle node online"));
+  Serial.println(F("THROTTLE FW BUILD 2026-07-22"));
   Serial.println(F("Waiting for heartbeat and throttle command..."));
 }
 

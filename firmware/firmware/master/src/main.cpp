@@ -1,13 +1,28 @@
 #include <Arduino.h>
 #include <STM32_CAN.h>
 
+#include "mpu6500.h"
 #include "carl_protocol.h"
 #include "messages.h"
 
 using namespace carl;
 
-STM32_CAN Can1(CAN1, ALT_2);  // PD0 RX, PD1 TX
+static constexpr uint8_t MPU_ADDRESS_LOW = 0x68;
+static constexpr uint8_t MPU_ADDRESS_HIGH = 0x69;
+static constexpr uint8_t MPU_WHO_AM_I_REGISTER = 0x75;
 
+static bool imuDetected = false;
+static uint8_t imuAddress = 0;
+static uint8_t imuWhoAmI = 0;
+
+STM32_CAN Can1(CAN1, ALT_2);  // PD0 RX, PD1 TX
+Mpu6500 imu;
+
+bool imuReady = false;
+uint32_t lastImuMs = 0;
+uint32_t imuReadErrorCount = 0;
+
+Mpu6500Data latestImuData = {};
 int16_t teleopVx = 0;
 int16_t teleopWz = 0;
 bool estopLatched = false;
@@ -22,6 +37,7 @@ bool haveStatus = false;
 uint32_t lastCmdMs = 0;
 uint32_t lastHbMs = 0;
 uint32_t lastTlmMs = 0;
+uint32_t lastImuReportMs = 0;
 uint32_t lastTeleopMs = 0;
 uint8_t hbCounter = 0;
 
@@ -43,7 +59,12 @@ static void canSend(uint16_t id, const uint8_t* buf, uint8_t len) {
     msg.buf[i] = buf[i];
   }
 
-  Can1.write(msg);
+bool sent = Can1.write(msg);
+
+if (!sent)
+{
+    Serial.println(F("CAN WRITE FAILED"));
+}
 }
 
 static void sendEstopFrame() {
@@ -202,7 +223,8 @@ static void pollCan() {
   }
 }
 
-static void streamTelemetry(bool teleopOk) {
+static void streamTelemetry(bool teleopOk) 
+{
   Serial.print(F("TLM hb="));
   Serial.print(hbCounter);
 
@@ -243,23 +265,185 @@ static void streamTelemetry(bool teleopOk) {
   Serial.println(lastEnc.right_count);
 }
 
-void setup() {
-  Serial.begin(115200);
-  delay(1000);
-
-  Can1.begin();
-  Can1.setBaudRate(CAN_BITRATE);
-
-  lastTeleopMs = millis();
-
-  Serial.println(F("AVL_CARL master/VCU online"));
+static bool i2cDevicePresent(uint8_t address)
+{
+    Wire.beginTransmission(address);
+    return Wire.endTransmission() == 0;
 }
 
-void loop() {
-  uint32_t now = millis();
+static bool readI2cRegister(
+    uint8_t address,
+    uint8_t registerAddress,
+    uint8_t &value)
+{
+    Wire.beginTransmission(address);
+    Wire.write(registerAddress);
 
-  pollSerial();
-  pollCan();
+    if (Wire.endTransmission(false) != 0)
+    {
+        return false;
+    }
+
+    uint8_t received = Wire.requestFrom(
+        address,
+        static_cast<uint8_t>(1));
+
+    if (received != 1 || !Wire.available())
+    {
+        return false;
+    }
+
+    value = Wire.read();
+    return true;
+}
+
+static void detectImu()
+{
+    imuDetected = false;
+    imuAddress = 0;
+    imuWhoAmI = 0;
+
+    const uint8_t addresses[] = {
+        MPU_ADDRESS_LOW,
+        MPU_ADDRESS_HIGH
+    };
+
+    for (uint8_t address : addresses)
+    {
+        if (!i2cDevicePresent(address))
+        {
+            continue;
+        }
+
+        uint8_t whoAmI = 0;
+
+        if (readI2cRegister(
+                address,
+                MPU_WHO_AM_I_REGISTER,
+                whoAmI))
+        {
+            imuDetected = true;
+            imuAddress = address;
+            imuWhoAmI = whoAmI;
+            break;
+        }
+    }
+
+    if (imuDetected)
+    {
+        Serial.print(F("IMU detected address=0x"));
+
+        if (imuAddress < 0x10)
+        {
+            Serial.print('0');
+        }
+
+        Serial.print(imuAddress, HEX);
+        Serial.print(F(" WHO_AM_I=0x"));
+
+        if (imuWhoAmI < 0x10)
+        {
+            Serial.print('0');
+        }
+
+        Serial.println(imuWhoAmI, HEX);
+    }
+    else
+    {
+      Serial.println(F("IMU not detected at 0x68 or 0x69"));
+    }
+}
+
+static void streamImuTelemetry()
+{
+    Serial.print(F("IMU"));
+
+    Serial.print(F(",ok="));
+    Serial.print(imuReady ? 1 : 0);
+
+    Serial.print(F(",ax_mps2="));
+    Serial.print(latestImuData.accelXMps2, 4);
+
+    Serial.print(F(",ay_mps2="));
+    Serial.print(latestImuData.accelYMps2, 4);
+
+    Serial.print(F(",az_mps2="));
+    Serial.print(latestImuData.accelZMps2, 4);
+
+    Serial.print(F(",gx_dps="));
+    Serial.print(latestImuData.gyroXDps, 4);
+
+    Serial.print(F(",gy_dps="));
+    Serial.print(latestImuData.gyroYDps, 4);
+
+    Serial.print(F(",gz_dps="));
+    Serial.print(latestImuData.gyroZDps, 4);
+
+    Serial.print(F(",temp_c="));
+    Serial.print(latestImuData.temperatureC, 2);
+
+    Serial.print(F(",errors="));
+    Serial.println(imuReadErrorCount);
+}
+
+
+
+void setup()
+{
+    Serial.begin(115200);
+    delay(1000);
+
+    imuReady = imu.begin(
+        Wire,
+        PB9,
+        PB8,
+        100000);
+
+    if (imuReady)
+    {
+        Serial.print(F("MPU-6500 online address=0x"));
+        Serial.print(imu.getAddress(), HEX);
+        Serial.print(F(" WHO_AM_I=0x"));
+        Serial.println(imu.getWhoAmI(), HEX);
+    }
+    else
+    {
+        Serial.println(F("ERROR: MPU-6500 initialization failed"));
+    }
+
+    Can1.begin();
+    Can1.setBaudRate(CAN_BITRATE);
+
+    lastTeleopMs = millis();
+
+    Serial.println(F("AVL_CAR master/VCU online"));
+}
+void loop()
+{
+    uint32_t now = millis();
+
+    if (now - lastImuMs >= 100)
+    {
+        lastImuMs = now;
+
+        if (imuReady)
+        {
+            if (imu.read(latestImuData))
+            {
+                streamImuTelemetry();
+            }
+            else
+            {
+                imuReady = false;
+                ++imuReadErrorCount;
+
+                Serial.println(F("ERROR: MPU-6500 read failed"));
+            }
+        }
+    }
+
+    pollSerial();
+    pollCan();
 
   bool teleopOk = (now - lastTeleopMs) <= TELEOP_TIMEOUT_MS;
 
