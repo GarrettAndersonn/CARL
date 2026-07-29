@@ -2,7 +2,7 @@ carl_bridge:
   ros__parameters:
     transport: serial   # serial | udp
     serial.port: /dev/ttyACM0
-    serial.baud: 921600
+    serial.baud: 115200
     udp.remote_host: 192.168.1.10
     udp.remote_port: 5000
     udp.local_port: 5001
