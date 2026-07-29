@@ -680,22 +680,25 @@ static void pollCan()
                 break;
             }
 
-            case CANID_ENCODER_FB:
-            {
-                if (unpack_encoder_fb(
-                        receivedMessage.buf,
-                        receivedMessage.len,
-                        &lastEnc))
-                {
-                    haveEncoderFeedback = true;
+case CANID_ENCODER_FB:
+{
+    if (unpack_encoder_fb(
+            receivedMessage.buf,
+            receivedMessage.len,
+            &lastEnc))
+    {
+        haveEncoderFeedback = true;
 
-                    // Encoder forwarding intentionally remains disabled
-                    // for this restore point. Enable it only after the
-                    // throttle-status and ROS-command paths are verified.
-                }
+        // Forward the validated eight-byte encoder payload
+        // to the Jetson using the existing companion protocol.
+        sendCompanionFrame(
+            CANID_ENCODER_FB,
+            receivedMessage.buf,
+            receivedMessage.len);
+    }
 
-                break;
-            }
+    break;
+}
 
             case CANID_ESTOP:
             {
