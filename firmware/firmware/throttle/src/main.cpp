@@ -149,7 +149,7 @@ static void sendEncoders() {
   EncoderFb e;
 
   e.left_count = (int32_t)encRL.read();
-  e.right_count = (int32_t)encRR.read();
+  e.right_count = -(int32_t)encRR.read();
 
   uint8_t buf[8];
   uint8_t len = pack_encoder_fb(buf, e);
