@@ -9,42 +9,29 @@ namespace carl {
 /**
  * CARL wheel-control abstraction.
  *
- * Current phase:
- *   Pass-through control only. The requested command is returned unchanged.
- *
- * Future phase:
- *   Encoder-derived wheel-speed estimation and independent left/right PI
- *   control will be implemented inside this class.
+ * Current milestone:
+ *   - Embedded rear-wheel speed estimation.
+ *   - Desired wheel-speed calculation.
+ *   - PI-control calculations in shadow mode.
+ *   - Motor output remains pass-through while PI is disabled.
  *
  * Safety remains owned by main.cpp:
  *   - heartbeat watchdog
- *   - E-stop
- *   - armed state
- *   - motor enable shutdown
+ *   - E-stop handling
+ *   - armed-state calculation
+ *   - physical motor disable
  */
 class WheelController {
  public:
   WheelController();
 
   /**
-   * Clear all internal state and force the controller output to zero.
+   * Clear all controller state.
    */
   void reset();
 
   /**
-   * Update the controller.
-   *
-   * desired:
-   *   Current four-wheel command from CAN, in per-mille.
-   *
-   * encoderFeedback:
-   *   Current signed cumulative rear-wheel encoder counts.
-   *
-   * armed:
-   *   True only when heartbeat and E-stop checks permit motion.
-   *
-   * nowMs:
-   *   Current system time from millis().
+   * Update speed estimation, target calculation, and control state.
    */
   void update(
       const ThrottleCmd& desired,
@@ -53,25 +40,95 @@ class WheelController {
       uint32_t nowMs);
 
   /**
-   * Return the command that should be sent to driveAll().
+   * Command sent to driveAll().
+   *
+   * While PI output is disabled, this remains identical to desired.
    */
   const ThrottleCmd& output() const;
 
-  /**
-   * Return the most recently received encoder feedback.
-   * This will be used by the later speed-control implementation.
-   */
   const EncoderFb& encoderFeedback() const;
 
-  /**
-   * Return the time of the most recent controller update.
-   */
+  float leftCountsPerSecond() const;
+  float rightCountsPerSecond() const;
+
+  float leftRpm() const;
+  float rightRpm() const;
+
+  float leftTargetRpm() const;
+  float rightTargetRpm() const;
+
+  float leftErrorRpm() const;
+  float rightErrorRpm() const;
+
+  float leftCorrectionMille() const;
+  float rightCorrectionMille() const;
+
+  float speedMismatchPercent() const;
+
   uint32_t lastUpdateMs() const;
 
+  bool speedEstimateValid() const;
+
+  /**
+   * Returns true only when PI corrections are being applied.
+   */
+  bool piOutputEnabled() const;
+
  private:
+  void updateSpeedEstimate(
+      const EncoderFb& encoderFeedback,
+      uint32_t nowMs);
+
+  void updateControlState(
+      const ThrottleCmd& desired,
+      bool armed,
+      uint32_t nowMs);
+
+  void clearControlState();
+
+  static int32_t wrappedCountDelta(
+      int32_t currentCount,
+      int32_t previousCount);
+
+  static int16_t averageSideCommand(
+      int16_t frontCommand,
+      int16_t rearCommand);
+
+  static float commandToTargetRpm(
+      int16_t sideCommand);
+
+  static int16_t clampCommandMille(
+      float command);
+
   ThrottleCmd outputCommand_;
+
   EncoderFb encoderFeedback_;
+  EncoderFb previousEncoderFeedback_;
+
   uint32_t lastUpdateMs_;
+  uint32_t lastSpeedUpdateMs_;
+  uint32_t lastControlUpdateMs_;
+
+  float leftCountsPerSecond_;
+  float rightCountsPerSecond_;
+
+  float leftRpm_;
+  float rightRpm_;
+
+  float leftTargetRpm_;
+  float rightTargetRpm_;
+
+  float leftErrorRpm_;
+  float rightErrorRpm_;
+
+  float leftIntegral_;
+  float rightIntegral_;
+
+  float leftCorrectionMille_;
+  float rightCorrectionMille_;
+
+  bool havePreviousEncoderSample_;
+  bool speedEstimateValid_;
 };
 
 }  // namespace carl

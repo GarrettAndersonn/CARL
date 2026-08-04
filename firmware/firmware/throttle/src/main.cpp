@@ -283,7 +283,6 @@ wheelController.update(
 if (armed) {
   driveAll(wheelController.output(), true);
 } else {
-  wheelController.reset();
   coastAll();
 }
 
@@ -335,9 +334,50 @@ if (armed) {
     Serial.print(cmd.fr);
 
     Serial.print(F(" RL="));
-    Serial.print(cmd.rl);
+Serial.print(cmd.rl);
 
-    Serial.print(F(" RR="));
-    Serial.println(cmd.rr);
+Serial.print(F(" RR="));
+Serial.print(cmd.rr);
+
+Serial.print(F(" leftCps="));
+Serial.print(wheelController.leftCountsPerSecond(), 1);
+
+Serial.print(F(" rightCps="));
+Serial.print(wheelController.rightCountsPerSecond(), 1);
+
+Serial.print(F(" leftRpm="));
+Serial.print(wheelController.leftRpm(), 2);
+
+Serial.print(F(" rightRpm="));
+Serial.print(wheelController.rightRpm(), 2);
+
+Serial.print(F(" mismatch="));
+Serial.print(wheelController.speedMismatchPercent(), 2);
+
+Serial.print(F(" targetL="));
+Serial.print(wheelController.leftTargetRpm(), 2);
+
+Serial.print(F(" targetR="));
+Serial.print(wheelController.rightTargetRpm(), 2);
+
+Serial.print(F(" errorL="));
+Serial.print(wheelController.leftErrorRpm(), 2);
+
+Serial.print(F(" errorR="));
+Serial.print(wheelController.rightErrorRpm(), 2);
+
+Serial.print(F(" corrL="));
+Serial.print(wheelController.leftCorrectionMille(), 1);
+
+Serial.print(F(" corrR="));
+Serial.print(wheelController.rightCorrectionMille(), 1);
+
+Serial.print(F(" piEnabled="));
+Serial.print(
+    wheelController.piOutputEnabled() ? 1 : 0);
+
+Serial.print(F(" speedValid="));
+Serial.println(
+    wheelController.speedEstimateValid() ? 1 : 0);
   }
 }
