@@ -5,6 +5,7 @@
 #include "carl_protocol.h"
 #include "heartbeat.h"
 #include "messages.h"
+#include "wheel_controller.h"
 
 using namespace carl;
 
@@ -45,6 +46,8 @@ Encoder encRL(ENC_RL_A, ENC_RL_B);
 Encoder encRR(ENC_RR_A, ENC_RR_B);
 
 Watchdog hbWatch(HEARTBEAT_TIMEOUT_MS);
+
+WheelController wheelController;
 
 ThrottleCmd cmd = {0, 0, 0, 0};
 
@@ -145,11 +148,17 @@ static void sendStatus(uint8_t state, uint8_t faults) {
   canSend(CANID_THROTTLE_STATUS, buf, len);
 }
 
-static void sendEncoders() {
+static EncoderFb readEncoderFeedback() {
   EncoderFb e;
 
   e.left_count = (int32_t)encRL.read();
   e.right_count = -(int32_t)encRR.read();
+
+  return e;
+}
+
+static void sendEncoders() {
+  const EncoderFb e = readEncoderFeedback();
 
   uint8_t buf[8];
   uint8_t len = pack_encoder_fb(buf, e);
@@ -263,11 +272,20 @@ void loop() {
     state = moving ? TST_DRIVING : TST_IDLE;
   }
 
-  if (armed) {
-    driveAll(cmd, true);
-  } else {
-    coastAll();
-  }
+  const EncoderFb controllerEncoderFeedback = readEncoderFeedback();
+
+wheelController.update(
+    cmd,
+    controllerEncoderFeedback,
+    armed,
+    now);
+
+if (armed) {
+  driveAll(wheelController.output(), true);
+} else {
+  wheelController.reset();
+  coastAll();
+}
 
   if (now - lastEncoderMs >= ENCODER_FB_PERIOD_MS) {
     lastEncoderMs = now;
